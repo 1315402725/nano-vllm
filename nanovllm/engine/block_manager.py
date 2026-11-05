@@ -45,7 +45,7 @@ class BlockManager:
         block = self.blocks[block_id]
         assert block.ref_count == 0
         if block.hash != -1 and self.hash_to_block_id.get(block.hash) == block_id:
-            del self.hash_to_block_id[block.hash]
+            del self.hash_to_block_id[block.hash] #删除旧的前缀匹配缓存
         block.reset()
         self.used_block_ids.add(block_id)
         return block_id
@@ -58,18 +58,24 @@ class BlockManager:
     def can_allocate(self, seq: Sequence) -> int:
         h = -1
         num_cached_blocks = 0
+        #当前序列所需要的blocks数量，先假定没有前缀匹配，都需要
         num_new_blocks = seq.num_blocks
         for i in range(seq.num_blocks - 1):
             token_ids = seq.block(i)
+            #计算第i个block块的hash值
             h = self.compute_hash(token_ids, h)
+            # hash值获取已经缓存的blockid，
             block_id = self.hash_to_block_id.get(h, -1)
+            # 如果未找到 或者 找到了但是是tokenids不一致
             if block_id == -1 or self.blocks[block_id].token_ids != token_ids:
                 break
             num_cached_blocks += 1
             if block_id in self.used_block_ids:
                 num_new_blocks -= 1
+        # 如果空闲block空间不足返回-1
         if len(self.free_block_ids) < num_new_blocks:
             return -1
+        # 最终返回前缀匹配的block数量
         return num_cached_blocks
 
     def allocate(self, seq: Sequence, num_cached_blocks: int):
@@ -88,7 +94,7 @@ class BlockManager:
                 self.used_block_ids.add(block_id)
             seq.block_table.append(block_id)
         for i in range(num_cached_blocks, seq.num_blocks):
-            seq.block_table.append(self._allocate_block())
+            seq.block_table.append(self._allocate_block()) #申请新的block放到当前对列的blocktable
         seq.num_cached_tokens = num_cached_blocks * self.block_size
 
     def deallocate(self, seq: Sequence):
